@@ -12,8 +12,8 @@ import os
 import mysql.connector
 import difflib
 
-dbuser = "eduride";
-dbpass = "eduride";
+dbuser = "eduride"
+dbpass = "eduride"
 dbname = "eduride"
 # table-> "log_ccsf_sp2013"
 #  colums->id, subject, verb, object, time
@@ -31,7 +31,7 @@ def getNameFromNav(msg):
     msg=msg.replace("(",'').replace(")",'')   # I hate regular expressions, so see what happens...
     msg=msg.replace(" ",'-')
     return msg
-    
+
 
 def getNameFromSC(msg):
     "get the name out of a diff stupid log message"
@@ -48,7 +48,7 @@ def openFileAndGotoEnd(name):
     return fp
 
 #         if (curdifffile is not None):
-#             curdifffile.close()      
+#             curdifffile.close()
 #         curdifffile = open(curbasedir + "/" + "diff.log", 'w')
 #         curdifffile.seek(0,2)    #goto end
 
@@ -66,25 +66,27 @@ cur = cnx.cursor()
 
 # get all files
 cur.execute('''
-SELECT subject as student, verb, object as obj, id as sid, time 
-FROM eduride.log_ccsf_sp2013 
+SELECT subject as student, verb, object as obj, id as sid, time
+FROM eduride.log_ccsf_sp2013
 WHERE verb = 'File' OR verb='stepChanged' OR verb='navInvokeTest' OR verb='openISA'
 ORDER BY student, id
 ''')
-curstudent=""
-curbasedir=""
-curISA="xxxISA-"
-curjavafilename = ""
+curstudent = ""
+curbasedir = ""
+curISA = "xxxISA-"
+curjavafilename  =  ""
 curlogfp = None
-lastfile=""
-leave_test="xxx"
+lastfile = ""
+cleaned_lastfile  =  ""
+leave_test = "xxx"
+
 for(student, verb, obj, sid, time) in cur:
     if (student != curstudent):
         # starting a new student
         curstudent = student
-        curbasedir = "C:/ccsf_sp13/" + student
+        curbasedir = "ccsf_sp13/" + student
         os.makedirs(curbasedir)
-        
+
     if (verb == 'openISA'):
         curISA=obj.split(')')[0].split('(')[1]
         curbasedir = curbasedir + "/" + curISA[10:]
@@ -96,44 +98,51 @@ for(student, verb, obj, sid, time) in cur:
         leave_test = 'leave'
         curjavafilename = getNameFromSC(obj)
     elif (verb == 'File'):
-        if (curlogfp is not None):
-            curlogfp.close()
-        curlogfp = open(curbasedir + "/" + curjavafilename + "--DIFF.log", 'w')
-        
+        curlogfp = open(curbasedir + '/' + curjavafilename + '--DIFF.log', 'a')
+        curlogfp.write('\n---\n')
+
         curfile = base64.b64decode(obj)
+
         if (curfile != lastfile):
-            ## ah, file has changed since last time
-            # write diffs to log
-            diff = difflib.SequenceMatcher(a=curfile, b=lastfile)
-            #gotta loop through, etc...
-            curlogfp.write('---\n')
-            curlogfp.write('File got logged: ' + curjavafilename + "   --   " + time.strftime('%H.%M.%S') + "   --  " + leave_test )
-            
-            lastfile = curfile
-            # write the file
-            curfilename = curjavafilename + "--"+ time.strftime('%H.%M.%S') + "--" + leave_test + ".java"
-#            print("IMMA WRITE: " + curfilename)
-            fp = open(curbasedir + "/" + curfilename + "--ORIG", 'w')
-            fp.write(curfile)
-            fp.close()
+
             # do some cleaning up, inserting \n in places for instance.
-            curfile = curfile.replace("//", "\n//")
-            curfile = curfile.replace("{", "{\n")
-            curfile = curfile.replace("}", "\n}\n")
-            curfile = curfile.replace(";", ";\n")
-            fp = open(curbasedir + "/" + curfilename, 'w')
+            cleaned_curfile = curfile.replace('//', '\n//')
+            cleaned_curfile = cleaned_curfile.replace('{', '{\n')
+            cleaned_curfile = cleaned_curfile.replace('}', '\n}\n')
+            cleaned_curfile = cleaned_curfile.replace(';', ';\n')
+
+            # construct the file name
+            curfilename = curjavafilename + '--'+ time.strftime('%H.%M.%S') + '--' + leave_test + '.java'
+
+            # write out the dirty version and clean version
+            fp = open(curbasedir + '/' + curfilename + '--ORIG', 'w')
             fp.write(curfile)
             fp.close()
+            fp = open(curbasedir + '/' + curfilename, 'w')
+            fp.write(curfile)
+            fp.close()
+
+            # write out the diff compared to the last file
+            diff = difflib.ndiff(b=cleaned_curfile.splitlines(), a=cleaned_lastfile.splitlines())
+            # open the log file for the current java file for appending the new diff
+            curlogfp.write('Logging file: ' + curfilename + '\n')
+            for change in diff:
+                curlogfp.write('\t\t\t\t\t')
+                curlogfp.write(change)
+                curlogfp.write('\n')
+
+            # update the lastfile and cleaned_lastfile to prepare for the next iteration
+            lastfile = curfile
+            cleaned_lastfile = cleaned_curfile
+
         else:
-            curlogfp.write("---\n")
-            curlogfp.write(leave_test + " but file unchanged (row id " + str(sid) + "\n")
+            curlogfp.write(leave_test + ' but file unchanged (row id ' + str(sid) + '\n')
             #if (leave_test == 'test'):
                 # maybe we should write test results in log file?  Yeah, but they are inconsistent doh
-            print("row id " + str(sid) + " same file as before (isa = "+ curISA +", leave/test = " + leave_test + ").")
+            print('row id ' + str(sid) + ' same file as before (isa = '+ curISA +', leave/test = ' + leave_test + ').')
+        curlogfp.close()
     else:
-        print "ERROR - dropped out of if on verb=" + verb
-        
-
+        print 'ERROR - dropped out of if on verb=' + verb
 
 
 cur.close();
