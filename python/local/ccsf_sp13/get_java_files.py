@@ -73,6 +73,7 @@ ORDER BY student, id
 ''')
 curstudent = ""
 curbasedir = ""
+studentbasedir = ""
 curISA = "xxxISA-"
 curjavafilename  =  ""
 curlogfp = None
@@ -85,12 +86,17 @@ for(student, verb, obj, sid, time) in cur:
         # starting a new student
         curstudent = student
         curbasedir = "ccsf_sp13/" + student
+        studentbasedir = curbasedir
         os.makedirs(curbasedir)
 
     if (verb == 'openISA'):
         curISA=obj.split(')')[0].split('(')[1]
-        curbasedir = curbasedir + "/" + curISA[10:]
-        os.makedirs(curbasedir)
+        curbasedir = studentbasedir + "/" + curISA[10:]
+        # make if doesn't exist
+        try:
+            os.makedirs(curbasedir)
+        except Exception as e:
+            print e
     elif (verb == 'navInvokeTest'):
         leave_test = 'test'
         curjavafilename = getNameFromNav(obj)
